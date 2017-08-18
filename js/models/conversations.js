@@ -781,13 +781,44 @@
                   var sessionCipher = new libsignal.SessionCipher(textsecure.storage.protocol, address);
                   return sessionCipher.closeOpenSessionForDevice();
               }
-            });
-        }).catch(function(error) {
+            }).then(function() {
+              var c = ConversationController.get(id);
+              return c.setProfileName(profile.name);
+            }.bind(this));
+        }.bind(this)).catch(function(error) {
             console.log(
                 'getProfile error:',
                 error && error.stack ? error.stack : error
             );
         });
+    },
+    setProfileName: function(encryptedProfileName) {
+      var key = this.get('profileKey');
+      if (!key) { return; }
+
+      return textsecure.crypto.decryptProfile(encryptedProfileName, key, iv).then(function(decrypted) {
+
+        // unpad
+        var paddedPlaintext = new Uint8Array(decrypted);
+        var plaintext;
+        for (var i = paddedPlaintext.length - 1; i >= 0; i--) {
+            if (paddedPlaintext[i] !== 0x00) {
+                plaintext = new Uint8Array(i);
+                plaintext.set(paddedPlaintext.subarray(0, i));
+                plaintext = plaintext.buffer;
+                break;
+            }
+        }
+
+        this.save({profileName: plaintext});
+      }.bind(this));
+    },
+    setProfileKey: function(key) {
+      if (this.get('profileKey') !== key) {
+        return new Promise(function(resolve, reject) {
+          this.save({profileKey: key}).then(resolve, reject);
+        });
+      }
     },
 
     fetchMessages: function() {
